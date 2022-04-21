@@ -1,0 +1,28 @@
+---
+title: "640finalproj"
+author: "Gaojia Xu, Guanqi Zeng"
+date: '2022-04-21'
+output: pdf_document
+---
+
+```{r setup, include=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(haven)
+library(tidyr)
+```
+
+```{r}
+data_ori <- read_sav('dataverse_files/STAR_Students.sav')
+#filter dataset, keep var we use
+data <- data_ori %>% 
+  filter(FLAGSGK == 1,
+         gkclasstype %in% c(1, 2)) %>% 
+  select(gender, race, gkfreelunch, gkschid, gktmathss, gkclasstype) %>% 
+  drop_na() 
+```
+
+```{r}
+data <- data %>%
+  
+```
+
