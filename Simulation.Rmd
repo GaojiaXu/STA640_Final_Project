@@ -36,7 +36,7 @@ yhatf <- function(data = star){
 ## use to simplify the first loop in former LOO design(meant to reduce overfitting--use LOO samples to predict Y of the leaved sample)
 ## can replace the control group predicted Y at one time
 
-yhatfl <- function(data = star, trt,){
+yhatfl <- function(data = star){
   Y0 <- as.matrix(data%>%filter(V2==0)%>%select(V1))
   N0 <- nrow(Y0)
   X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
