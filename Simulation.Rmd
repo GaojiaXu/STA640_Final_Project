@@ -1,0 +1,165 @@
+---
+title: "Simulation"
+author: "Gaojia Xu"
+date: '2022-04-23'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(pracma)
+```
+
+```{r}
+# load data
+star <- read.table("star.raw", quote="\"", comment.char="")
+```
+
+
+```{r}
+# function: yhatf.m
+## predicted outcome of the whole dataset based on the model use only control group
+yhatf <- function(data = star){
+  Y0 <- data%>%filter(V2==0)%>%select(V1)
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% as.matrix(Y0))
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  return(pred_outcome)
+}
+
+## use to simplify the first loop in former LOO design(meant to reduce overfitting--use LOO samples to predict Y of the leaved sample)
+## can replace the control group predicted Y at one time
+
+yhatfl <- function(data = star, trt,){
+  Y0 <- as.matrix(data%>%filter(V2==0)%>%select(V1))
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% Y0)
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  
+  e0 <- Y0 - X0 %*% beta
+
+  Q <- pinv(t(X0) %*% X0)
+  h <- diag(X0 %*% Q %*% t(X0))
+  
+  sp_mat <- diag(as.vector(e0/(1-h)), nrow = N0, ncol = N0)
+    
+  predicted_outcome_cross_validated <- pred_outcome
+  predicted_outcome_cross_validated[which(data$V2==0)] <- X0 %*% beta - diag(X0 %*% Q %*% t(X0) %*% sp_mat)
+  return(predicted_outcome_cross_validated)
+}
+```
+
+
+```{r}
+# function: mregbygroup.m
+mregbygroup <- function(data = star, pred_outcome){
+  n <- nrow(star)
+  
+  # individuals in treatment & control 
+  data_trt_idx <- which(data$V2==1)
+  data_control_idx <- which(data$V2==0)
+  
+  # unadjusted 
+  ## low
+  tau1_idx <- which(pred_outcome <= quantile(pred_outcome,1/3))
+  tau1_trt <- data$V1[intersect(tau1_idx, data_trt_idx)]
+  tau1_control <- data$V1[intersect(tau1_idx, data_control_idx)]
+  tau1_unadj <- mean(tau1_trt)-mean(tau1_control)
+  
+  ## medium
+  tau2_idx <- which((pred_outcome > quantile(pred_outcome,1/3)) & (pred_outcome <= quantile(pred_outcome,2/3)))
+  tau2_trt <- data$V1[intersect(tau2_idx, data_trt_idx)]
+  tau2_control <- data$V1[intersect(tau2_idx, data_control_idx)]
+  tau2_unadj <- mean(tau2_trt)-mean(tau2_control)
+  
+  ## high
+  tau3_idx <- which(pred_outcome > quantile(pred_outcome,2/3))
+  tau3_trt <- data$V1[intersect(tau3_idx, data_trt_idx)]
+  tau3_control <- data$V1[intersect(tau3_idx, data_control_idx)]
+  tau3_unadj <- mean(tau3_trt)-mean(tau3_control)
+  
+  # adjusted
+  ## low
+  fit_tau1 <- lm(V1 ~ ., data=data[tau1_idx,])
+  tau1_adjust <- fit_tau1$coefficients[['V2']]
+  
+  ## medium
+  fit_tau2 <- lm(V1 ~ ., data=data[tau2_idx,])
+  tau2_adjust <- fit_tau2$coefficients[['V2']]
+  
+  ## high
+  fit_tau3 <- lm(V1 ~ ., data=data[tau3_idx,])
+  tau3_adjust <- fit_tau3$coefficients[['V2']]
+  
+  return(c(tau1_unadj, tau2_unadj, tau3_unadj, tau1_adjust, tau2_adjust, tau3_adjust))
+}
+```
+
+
+```{r}
+# Simulation Star
+N <- nrow(star)
+N0 <- nrow(star[star[,2] == 0,])
+N1 <- N-N0
+
+Y0 <- star[star[,2] == 0, 1]
+k = ncol(star[star[,2] == 0,])
+lm1 <- lm(V1 ~.-V2, data = star %>% filter(V2 ==0))
+beta <- lm1$coefficients
+beta[64] <- 0
+Uhat <- lm1$residuals
+sigma <- sqrt((t(Uhat)%*%Uhat)/(N0-k))
+
+X <- cbind(rep(1, N), star[, 3:83])
+w <- c(rep(0,N0), rep(1,N1))
+
+ps <- 1/2
+
+R = 10000
+SSR = 100
+est = matrix(0,nrow = R, ncol = 6)
+estl = matrix(0,nrow = R, ncol = 6)
+ests = matrix(0,nrow = R, ncol = 6)
+estss = matrix(0,nrow = R, ncol = 6)
+estu = matrix(0,nrow = R, ncol = 6)
+
+# loop
+for(r in 1:R){
+  print(r)
+  I <- ceiling(N * c(runif(N)))
+  x = X[I,]
+  u = as.vector(sigma)*(c(rnorm(N)))
+  y = as.matrix(x) %*% as.numeric(beta) + u
+  
+  yhat <- yhatf(x)
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
