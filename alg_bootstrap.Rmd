@@ -2,7 +2,9 @@
 title: "Simulation"
 author: "Gaojia Xu, Guanqi Zeng"
 date: '2022-04-23'
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -123,7 +125,9 @@ sd_tau_unadjust <- sqrt(s02/length(Y0) + s12/length(Y1))
 fit1 <- lm(V1 ~ ., data=star)
 tau_adjust <- fit1$coefficients[['V2']]
 sd_tau_adjust <- coef(summary(fit1))['V2', "Std. Error"]
+```
 
+```{r,  warning=FALSE}
 ### full sample
 pred_full_sample <- yhatf(data = star)
 tauk_full_sample <- mregbygroup(data = star, pred_outcome = pred_full_sample)
@@ -167,7 +171,7 @@ tauk_10fold <-  mregbygroup(data = star, pred_outcome = fold_tau_pred)
 ```
 
 
-```{r warning=FALSE}
+```{r warning=FALSE, eval=FALSE}
 set.seed(1988)
 # Bootstrap for SD
 R = 200
@@ -227,7 +231,7 @@ for(r in 1:R){
 }
 ```
 
-```{r}
+```{r, eval=FALSE}
 saveRDS(est, file="bootstrap_sd/est_bootstrap.Rda")
 saveRDS(estl, file="bootstrap_sd/estl_bootstrap.Rda")
 saveRDS(estss, file="bootstrap_sd/estss_bootstrap.Rda")

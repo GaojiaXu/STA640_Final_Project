@@ -2,7 +2,9 @@
 title: "Simulation2"
 author: "Gaojia Xu"
 date: '2022-04-23'
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -19,7 +21,7 @@ library(ggpubr)
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # function: yhatf.m
 ## predicted outcome of the whole dataset based on the model use only control group
 yhatf <- function(data = star){
@@ -57,7 +59,7 @@ yhatfl <- function(data = star){
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # function: mregbygroup.m
 mregbygroup <- function(data = star, pred_outcome){
   n <- nrow(data)
@@ -102,7 +104,7 @@ mregbygroup <- function(data = star, pred_outcome){
 }
 ```
 
-```{r}
+```{r, eval=FALSE}
 # hyperparameters
 K <- c(10,20,40)
 N <- c(200,1000,5000)
@@ -117,7 +119,7 @@ lN <- length(N)
 results <- list()
 ```
 
-```{r warning = F}
+```{r warning = F, eval=FALSE}
 for(i_k in 1:lK){
   k <- K[i_k]
   beta <- rep(1, k+1)
@@ -195,7 +197,7 @@ for(i_k in 1:lK){
 }
 ```
 
-```{r}
+```{r, eval=FALSE}
 # we generated 3*3=9 combination of K(num of covariates) and N(number of data)
 # each combination has 4 types of estimators, each estimator has 6 results(3 unadjusted, 3 adjusted)
 # result has 4*9=36 lists in it
@@ -212,8 +214,7 @@ bias <- lapply(results, colMeans) %>% unlist() %>% as.vector()
 bias_table <- as.data.frame(matrix(bias, nrow=36))
 
 bias_table <- cbind(bias_table[1:12,], bias_table[13:24,], bias_table[25:36,])
-colnames(bias_table) <- c("Low", "Medium", "High", "Low", "Medium", "High", "Low", "Medium", "High",
-                          "Low", "Medium", "High", "Low", "Medium", "High", "Low", "Medium", "High")
+colnames(bias_table) <- c(rep(c("Low", "Medium", "High"),6))
 rownames(bias_table) <- c("N=200 $\\hat\\tau_k$", "N=200 $\\hat\\tau_k^{LOO}$", 
                           "N=200 $\\hat\\tau_k^{RSS}$","N=200 $\\hat\\tau_k^{10fold}$",
                           "N=1000 $\\hat\\tau_k$", "N=1000 $\\hat\\tau_k^{LOO}$", 
@@ -223,7 +224,8 @@ rownames(bias_table) <- c("N=200 $\\hat\\tau_k$", "N=200 $\\hat\\tau_k^{LOO}$",
 ```
 
 ```{r}
-kable(bias_table, caption = "Bias in Simulations Using Artificial Data", digits=2) %>%
+kable(bias_table, caption = "Bias in Simulations Using Artificial Data", digits=2,
+      format = "html", table.attr = "style='width:100%;'") %>%
 add_header_above(c(" ", "Unadjusted" = 3, "Adjusted" = 3, 
                    "Unadjusted" = 3, "Adjusted" = 3, 
                    "Unadjusted" = 3, "Adjusted" = 3)) %>%

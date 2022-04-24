@@ -2,7 +2,9 @@
 title: "Simulation"
 author: "Gaojia Xu"
 date: '2022-04-23'
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -18,13 +20,13 @@ library(ggplot2)
 library(ggpubr)
 ```
 
-```{r}
+```{r, eval=FALSE}
 # load data
-star <- read.table("star.raw", quote="\"", comment.char="")
+star <- read.table("data\star.raw", quote="\"", comment.char="")
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # function: yhatf.m
 ## predicted outcome of the whole dataset based on the model use only control group
 yhatf <- function(data = star){
@@ -62,7 +64,7 @@ yhatfl <- function(data = star){
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 # function: mregbygroup.m
 mregbygroup <- function(data = star, pred_outcome){
   n <- nrow(star)
@@ -108,7 +110,7 @@ mregbygroup <- function(data = star, pred_outcome){
 ```
 
 
-```{r warning=FALSE}
+```{r warning=FALSE, eval=FALSE}
 # Simulation Star
 N <- nrow(star)
 N0 <- nrow(star[star[,2] == 0,])
@@ -188,7 +190,7 @@ for(r in 1:R){
 }
 ```
 
-```{r}
+```{r, eval=FALSE}
 saveRDS(est, file="est.Rda")
 saveRDS(estl, file="estl.Rda")
 saveRDS(estss, file="estss.Rda")
@@ -196,10 +198,10 @@ saveRDS(estf, file="estf.Rda")
 ```
 
 ```{r}
-est <- readRDS("sim_results/est.Rda")
-estl <- readRDS("sim_results/estl.Rda")
-estss <- readRDS("sim_results/estss.Rda")
-estf <- readRDS("sim_results/estf.Rda")
+est <- readRDS("sim_results_STAR/est.Rda")
+estl <- readRDS("sim_results_STAR/estl.Rda")
+estss <- readRDS("sim_results_STAR/estss.Rda")
+estf <- readRDS("sim_results_STAR/estf.Rda")
 ```
 
 ```{r}
