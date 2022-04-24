@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(pracma)
+library(caret)
 ```
 
 ```{r}
@@ -104,7 +105,7 @@ mregbygroup <- function(data = star, pred_outcome){
 ```
 
 
-```{r}
+```{r warning=FALSE}
 # Simulation Star
 N <- nrow(star)
 N0 <- nrow(star[star[,2] == 0,])
@@ -119,17 +120,16 @@ Uhat <- lm1$residuals
 sigma <- sqrt((t(Uhat)%*%Uhat)/(N0-k))
 
 X <- cbind(rep(1, N), star[, 3:83])
-w <- c(rep(0,N0), rep(1,N1))
+V2 <- c(rep(0,N0), rep(1,N1))
 
 ps <- 1/2
 
-R = 10000
+R = 200
 SSR = 100
 est = matrix(0,nrow = R, ncol = 6)
 estl = matrix(0,nrow = R, ncol = 6)
-ests = matrix(0,nrow = R, ncol = 6)
 estss = matrix(0,nrow = R, ncol = 6)
-estu = matrix(0,nrow = R, ncol = 6)
+estf = matrix(0,nrow = R, ncol = 6)
 
 # loop
 for(r in 1:R){
@@ -138,15 +138,92 @@ for(r in 1:R){
   x = X[I,]
   u = as.vector(sigma)*(c(rnorm(N)))
   y = as.matrix(x) %*% as.numeric(beta) + u
+  V1 = y
+  # V1 means y, V2 means treatment
+  x <- as.data.frame(cbind(V1, V2, x[,2:ncol(x)]))
   
-  yhat <- yhatf(x)
+  # generate tau for full sample and loo
+  yhat <- yhatf(data = x)
+  yhatl <- yhatfl(data = x)
+  
+  # record results
+  est[r,] <- mregbygroup(data = x, pred_outcome = yhat)
+  estl[r,] <- mregbygroup(data = x, pred_outcome = yhatl)
+  
+  # generate tau for ss
+  resultsSS = matrix(0,nrow = SSR, ncol = 6)
+  
+  x_control_idx <- which(x$V2==0)
+  x_control <- x[x_control_idx,]
+  
+  for (i in c(1:SSR)){
+  # randomly assign to prediction group or estimation group in control data
+    predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
+    predgrp <- x[predgrp_idx,]
+    estgrp_idx <- setdiff(x_control_idx, predgrp_idx)
+    estgrp <- data[estgrp_idx,]
+    
+    fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
+    fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=x)
+    
+    resultsSS[i,] <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred)
+  }
+  estss[r,] <-  colMeans(resultsSS)
+  
+  # generate tau for 10fold
+  flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
+  ## create new dataset copy from tauk prediction
+  fold_tau_pred <- yhat
+  
+  for (i in 1:10){
+      fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
+      fit_tauk_10fold_pred <- predict(fit_tauk_10fold, newdata=x_control[which(flds == i),])
+      #replace control group predicted value with new 10fold leave out predicted value, keep treatment group predicted value unchanged
+      fold_tau_pred[x_control_idx][which(flds == i)] <- fit_tauk_10fold_pred
+  }
+  estf[r,] <-  mregbygroup(data = x, pred_outcome = fold_tau_pred)
 }
 ```
 
+```{r}
+saveRDS(est, file="est.Rda")
+saveRDS(estl, file="estl.Rda")
+saveRDS(estss, file="estss.Rda")
+saveRDS(estf, file="estf.Rda")
+```
 
+```{r}
+#testing_est <- readRDS("est.Rda")
+```
 
+```{r}
+# Bias, 
+bias <-  matrix(0,nrow = 4, ncol = 6)
+bias[1,] <- colMeans(est)
+bias[2,] <- colMeans(estl)
+bias[3,] <- colMeans(estss)
+bias[4,] <- colMeans(estf)
+```
 
+```{r}
+# Coverage
+## full sample
+cov_est <- rep(1,6)-colMeans(abs(est/colSds(est)) > 1.96)
+## loo sample
+cov_estl <-rep(1,6)-colMeans(abs(estl/colSds(estl)) > 1.96)
+## ss
+cov_estss <-rep(1,6)-colMeans(abs(estss/colSds(estss)) > 1.96)
+## 10 fold
+cov_estf <-rep(1,6)-colMeans(abs(estf/colSds(estf)) > 1.96)
 
+cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
+```
+
+```{r}
+# RMSE
+rmse_est <- sqrt(colMeans(est**2))
+
+```
 
 
 
