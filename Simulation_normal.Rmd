@@ -196,7 +196,38 @@ for(i_k in 1:lK){
 ```
 
 ```{r}
+# we generated 3*3=9 combination of K(num of covariates) and N(number of data)
+# each combination has 4 types of estimators, each estimator has 6 results(3 unadjusted, 3 adjusted)
+# result has 4*9=36 lists in it
 saveRDS(results, file="sim_results_normal/est_normal.Rda")
+```
+
+```{r}
+results <- readRDS("sim_results_normal/est_normal.Rda")
+```
+
+```{r}
+library(kableExtra)
+bias <- lapply(results, colMeans) %>% unlist() %>% as.vector()
+bias_table <- as.data.frame(matrix(bias, nrow=36))
+
+bias_table <- cbind(bias_table[1:12,], bias_table[13:24,], bias_table[25:36,])
+colnames(bias_table) <- c("Low", "Medium", "High", "Low", "Medium", "High", "Low", "Medium", "High",
+                          "Low", "Medium", "High", "Low", "Medium", "High", "Low", "Medium", "High")
+rownames(bias_table) <- c("N=200 $\\hat\\tau_k$", "N=200 $\\hat\\tau_k^{LOO}$", 
+                          "N=200 $\\hat\\tau_k^{RSS}$","N=200 $\\hat\\tau_k^{10fold}$",
+                          "N=1000 $\\hat\\tau_k$", "N=1000 $\\hat\\tau_k^{LOO}$", 
+                          "N=1000 $\\hat\\tau_k^{RSS}$","N=1000 $\\hat\\tau_k^{10fold}$",
+                          "N=5000 $\\hat\\tau_k$", "N=5000 $\\hat\\tau_k^{LOO}$",
+                          "N=5000 $\\hat\\tau_k^{RSS}$","N=5000 $\\hat\\tau_k^{10fold}$")
+```
+
+```{r}
+kable(bias_table, caption = "Bias in Simulations Using Artificial Data", digits=2) %>%
+add_header_above(c(" ", "Unadjusted" = 3, "Adjusted" = 3, 
+                   "Unadjusted" = 3, "Adjusted" = 3, 
+                   "Unadjusted" = 3, "Adjusted" = 3)) %>%
+add_header_above(c(" ", "K = 10" = 6, "K = 20" = 6, "K = 40" = 6))
 ```
 
 

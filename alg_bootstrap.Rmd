@@ -228,17 +228,17 @@ for(r in 1:R){
 ```
 
 ```{r}
-saveRDS(est, file="sim_results/est_bootstrap.Rda")
-saveRDS(estl, file="sim_results/estl_bootstrap.Rda")
-saveRDS(estss, file="sim_results/estss_bootstrap.Rda")
-saveRDS(estf, file="sim_results/estf_bootstrap.Rda")
+saveRDS(est, file="bootstrap_sd/est_bootstrap.Rda")
+saveRDS(estl, file="bootstrap_sd/estl_bootstrap.Rda")
+saveRDS(estss, file="bootstrap_sd/estss_bootstrap.Rda")
+saveRDS(estf, file="bootstrap_sd/estf_bootstrap.Rda")
 ```
 
 ```{r}
-est <- readRDS("sim_results/est_bootstrap.Rda")
-estl <- readRDS("sim_results/estl_bootstrap.Rda")
-estss <- readRDS("sim_results/estss_bootstrap.Rda")
-estf <- readRDS("sim_results/estf_bootstrap.Rda")
+est <- readRDS("bootstrap_sd/est_bootstrap.Rda")
+estl <- readRDS("bootstrap_sd/estl_bootstrap.Rda")
+estss <- readRDS("bootstrap_sd/estss_bootstrap.Rda")
+estf <- readRDS("bootstrap_sd/estf_bootstrap.Rda")
 ```
 
 ```{r}
@@ -251,10 +251,10 @@ sd_10f <- colSds(estf)
 
 ```{r}
 result_default <- rbind(c(tau_unadjust, tau_adjust), c(sd_tau_unadjust, sd_tau_adjust))
-rownames(result_default) <- c("estimation","std")
+rownames(result_default) <- c("$\\hat \\tau$","se $\\hat \\tau$")
 kable(result_default, 
       col.names=c("Unadjusted","Adjusted"),
-      caption = "STAR default results", digits=4)
+      caption = "STAR Default Estimation Results", digits=4)
 ```
 
 ```{r}
@@ -264,14 +264,14 @@ result_ss <- rbind(tauk_ss, sd_ss)
 result_10fold <- rbind(tauk_10fold, sd_10f)
 
 result_table <- rbind(result_fullsample, result_loo, result_ss, result_10fold)
-rownames(result_table) <- c("$\\tau_k$","se $\\tau_k$",
-                    "$\\tau_k^{LOO}$","se $\\tau_k^{LOO}$",
-                    "$\\tau_k^{RSS}$","se $\\tau_k^{RSS}$",
-                    "$\\tau_k^{10fold}$","se $\\tau_k^{10fold}$")
+rownames(result_table) <- c("$\\hat\\tau_k$","se $\\hat\\tau_k$",
+                    "$\\hat\\tau_k^{LOO}$","se $\\hat\\tau_k^{LOO}$",
+                    "$\\hat\\tau_k^{RSS}$","se $\\hat\\tau_k^{RSS}$",
+                    "$\\hat\\tau_k^{10fold}$","se $\\hat\\tau_k^{10fold}$")
 
 kable(result_table, 
       col.names=c("Unadj low","Unadj medium","Unadj high","Adj low","Adj medium","Adj high"),
-      caption = "STAR results", digits=4, escape=FALSE)
+      caption = "STAR Estimation Results", digits=4, escape=FALSE)
 ```
 
 
