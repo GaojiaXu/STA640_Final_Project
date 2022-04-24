@@ -28,7 +28,7 @@ yhatf <- function(data = star){
   X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
   
   beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% as.matrix(Y0))
-  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(data)), data%>%select(-c(V1,V2)))) %*% beta
   return(pred_outcome)
 }
 
@@ -41,7 +41,7 @@ yhatfl <- function(data = star){
   X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
   
   beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% Y0)
-  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(data)), data%>%select(-c(V1,V2)))) %*% beta
   
   e0 <- Y0 - X0 %*% beta
 
@@ -60,7 +60,7 @@ yhatfl <- function(data = star){
 ```{r}
 # function: mregbygroup.m
 mregbygroup <- function(data = star, pred_outcome){
-  n <- nrow(star)
+  n <- nrow(data)
   
   # individuals in treatment & control 
   data_trt_idx <- which(data$V2==1)
@@ -106,7 +106,7 @@ mregbygroup <- function(data = star, pred_outcome){
 # hyperparameters
 K <- c(10,20,40)
 N <- c(200,1000,5000)
-R <- 5#200
+R <- 100
 M <- 100
 SSR <- 100
 ps <- 1/2
@@ -114,13 +114,14 @@ ps <- 1/2
 lK <- length(K)
 lN <- length(N)
 
-results <- matrix(0, nrow = lK * lN * R, ncol = 30)
+results <- list()
 ```
 
-```{r}
+```{r warning = F}
 for(i_k in 1:lK){
   k <- K[i_k]
   beta <- rep(1, k+1)
+  
   for(i_n in 1:lN){
     n <- N[i_n]
     V2 <- c(rep(0,n/2), rep(1, n/2))
@@ -135,7 +136,7 @@ for(i_k in 1:lK){
       x <- cbind(rep(1, n), matrix(rnorm(n*k), nrow = n, ncol = k))
       z <- matrix(rnorm(n * (M-k)), nrow = n, ncol = M-k)
       
-      y <- cbind(x,z) * rep(1, M+1)
+      y <- cbind(x,z) %*% rep(1, M+1)
       V1 <- y
       
       x <- as.data.frame(cbind(V1, V2, x))
@@ -153,6 +154,7 @@ for(i_k in 1:lK){
       x_control_idx <- which(x$V2==0)
       x_control <- x[x_control_idx,]
   
+      resultss <- matrix(0, nrow = SSR, ncol = 6)
       for (i in c(1:SSR)){
       # randomly assign to prediction group or estimation group in control data
         predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
@@ -163,14 +165,14 @@ for(i_k in 1:lK){
         fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
         fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=x)
         
-        resultss <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred[-predgrp_idx])
+        resultss[i, ] <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred[-predgrp_idx])
       }
       tauk_ss <-  colMeans(resultss)
       
       # generate tau for 10fold
       flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
       ## create new dataset copy from tauk prediction
-      fold_tau_pred <- tauk
+      fold_tau_pred <- yhat
       
       for (i in 1:10){
           fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
@@ -186,200 +188,20 @@ for(i_k in 1:lK){
       estss[r,] <- tauk_ss
       estf[r,] <- tauk_10f
     }
-    
-    
-    
+    # put them into a list
+    list_nk <- list(est, estl, estss, estf)
+    results <- append(results, list_nk)
   }
 }
 ```
 
-```{r warning=FALSE}
-# Simulation Star
-N <- nrow(star)
-N0 <- nrow(star[star[,2] == 0,])
-N1 <- N-N0
-
-Y0 <- star[star[,2] == 0, 1]
-k = ncol(star[star[,2] == 0,])
-lm1 <- lm(V1 ~.-V2, data = star %>% filter(V2 ==0))
-beta <- lm1$coefficients
-beta[64] <- 0
-Uhat <- lm1$residuals
-sigma <- sqrt((t(Uhat)%*%Uhat)/(N0-k))
-
-X <- cbind(rep(1, N), star[, 3:83])
-V2 <- c(rep(0,N0), rep(1,N1))
-
-ps <- 1/2
-
-R = 200
-SSR = 100
-est = matrix(0,nrow = R, ncol = 6)
-estl = matrix(0,nrow = R, ncol = 6)
-estss = matrix(0,nrow = R, ncol = 6)
-estf = matrix(0,nrow = R, ncol = 6)
-
-# loop
-for(r in 1:R){
-  print(r)
-  I <- ceiling(N * c(runif(N)))
-  x = X[I,]
-  u = as.vector(sigma)*(c(rnorm(N)))
-  y = as.matrix(x) %*% as.numeric(beta) + u
-  V1 = y
-  # V1 means y, V2 means treatment
-  x <- as.data.frame(cbind(V1, V2, x[,2:ncol(x)]))
-  
-  # generate tau for full sample and loo
-  yhat <- yhatf(data = x)
-  yhatl <- yhatfl(data = x)
-  
-  # record results
-  est[r,] <- mregbygroup(data = x, pred_outcome = yhat)
-  estl[r,] <- mregbygroup(data = x, pred_outcome = yhatl)
-  
-  # generate tau for ss
-  resultsSS = matrix(0,nrow = SSR, ncol = 6)
-  
-  x_control_idx <- which(x$V2==0)
-  x_control <- x[x_control_idx,]
-  
-  for (i in c(1:SSR)){
-  # randomly assign to prediction group or estimation group in control data
-    predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
-    predgrp <- x[predgrp_idx,]
-    estgrp_idx <- setdiff(x_control_idx, predgrp_idx)
-    estgrp <- data[estgrp_idx,]
-    
-    fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
-    fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=x)
-    
-    resultsSS[i,] <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred)
-  }
-  estss[r,] <-  colMeans(resultsSS)
-  
-  # generate tau for 10fold
-  flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
-  ## create new dataset copy from tauk prediction
-  fold_tau_pred <- yhat
-  
-  for (i in 1:10){
-      fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
-      fit_tauk_10fold_pred <- predict(fit_tauk_10fold, newdata=x_control[which(flds == i),])
-      #replace control group predicted value with new 10fold leave out predicted value, keep treatment group predicted value unchanged
-      fold_tau_pred[x_control_idx][which(flds == i)] <- fit_tauk_10fold_pred
-  }
-  estf[r,] <-  mregbygroup(data = x, pred_outcome = fold_tau_pred)
-}
-```
-
 ```{r}
-saveRDS(est, file="est.Rda")
-saveRDS(estl, file="estl.Rda")
-saveRDS(estss, file="estss.Rda")
-saveRDS(estf, file="estf.Rda")
+saveRDS(results, file="sim_results/est_normal.Rda")
 ```
 
-```{r}
-#testing_est <- readRDS("est.Rda")
-```
 
-```{r}
-# Bias, 
-bias <-  matrix(0,nrow = 4, ncol = 6)
-bias[1,] <- colMeans(est)
-bias[2,] <- colMeans(estl)
-bias[3,] <- colMeans(estss)
-bias[4,] <- colMeans(estf)
-```
 
-```{r}
-# Coverage
-## full sample
-cov_est <- colMeans(abs(est/colSds(est)) <= 1.96)
-## loo sample
-cov_estl <- colMeans(abs(estl/colSds(estl)) <= 1.96)
-## ss
-cov_estss <- colMeans(abs(estss/colSds(estss)) <= 1.96)
-## 10 fold
-cov_estf <- colMeans(abs(estf/colSds(estf)) <= 1.96)
 
-cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
-```
 
-```{r}
-# RMSE
-rmse_est <- sqrt(colMeans(est**2))
-rmse_estl <- sqrt(colMeans(estl**2))
-rmse_estss <- sqrt(colMeans(estss**2))
-rmse_estf <- sqrt(colMeans(estf**2))
 
-rmse <- rbind(rmse_est, rmse_estl, rmse_estss, rmse_estf)
-```
-
-```{r}
-# Unadjusted
-## Full est
-p1 <- ggplot(data=as.data.frame(est))+
-  geom_density(aes(x = V1), linetype="solid") +
-  geom_density(aes(x = V2), linetype="longdash") +
-  geom_density(aes(x = V3), linetype="dotdash") +
-  ggtitle('Full sample Unadjusted') + 
-  theme_bw()
-## LOO est
-p2 <- ggplot(data=as.data.frame(estl))+
-  geom_density(aes(x = V1), linetype="solid") +
-  geom_density(aes(x = V2), linetype="longdash") +
-  geom_density(aes(x = V3), linetype="dotdash") +
-  ggtitle('LOO Unadjusted') + 
-  theme_bw()
-## SS est
-p3 <- ggplot(data=as.data.frame(estss))+
-  geom_density(aes(x = V1), linetype="solid") +
-  geom_density(aes(x = V2), linetype="longdash") +
-  geom_density(aes(x = V3), linetype="dotdash") +
-  ggtitle('Splited Sample Unadjusted') + 
-  theme_bw()
-## 10fold est
-p4 <- ggplot(data=as.data.frame(estf))+
-  geom_density(aes(x = V1), linetype="solid") +
-  geom_density(aes(x = V2), linetype="longdash") +
-  geom_density(aes(x = V3), linetype="dotdash") +
-  ggtitle('10-fold Unadjusted') + 
-  theme_bw()
-ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
-```
-
-```{r}
-# Adjusted
-## Full est
-p5 <- ggplot(data=as.data.frame(est))+
-  geom_density(aes(x = V4), linetype="solid") +
-  geom_density(aes(x = V5), linetype="longdash") +
-  geom_density(aes(x = V6), linetype="dotdash") +
-  ggtitle('Full sample Adjusted') + 
-  theme_bw()
-## LOO est
-p6 <- ggplot(data=as.data.frame(estl))+
-  geom_density(aes(x = V4), linetype="solid") +
-  geom_density(aes(x = V5), linetype="longdash") +
-  geom_density(aes(x = V6), linetype="dotdash") +
-  ggtitle('LOO Adjusted') + 
-  theme_bw()
-## SS est
-p7 <- ggplot(data=as.data.frame(estss))+
-  geom_density(aes(x = V4), linetype="solid") +
-  geom_density(aes(x = V5), linetype="longdash") +
-  geom_density(aes(x = V6), linetype="dotdash") +
-  ggtitle('Splited Sample Adjusted') + 
-  theme_bw()
-## 10fold est
-p8 <- ggplot(data=as.data.frame(estf))+
-  geom_density(aes(x = V4), linetype="solid") +
-  geom_density(aes(x = V5), linetype="longdash") +
-  geom_density(aes(x = V6), linetype="dotdash") +
-  ggtitle('10-fold Adjusted') + 
-  theme_bw()
-ggarrange(p5, p6, p7, p8, nrow = 2, ncol = 2)
-```
 
