@@ -196,7 +196,7 @@ for(i_k in 1:lK){
 ```
 
 ```{r}
-saveRDS(results, file="sim_results/est_normal.Rda")
+saveRDS(results, file="sim_results_normal/est_normal.Rda")
 ```
 
 
