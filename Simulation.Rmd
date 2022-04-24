@@ -1,0 +1,269 @@
+---
+title: "Simulation"
+author: "Gaojia Xu"
+date: '2022-04-23'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(pracma)
+library(caret)
+library(proxyC)
+library(ggplot2)
+library(ggpubr)
+```
+
+```{r}
+# load data
+star <- read.table("star.raw", quote="\"", comment.char="")
+```
+
+
+```{r}
+# function: yhatf.m
+## predicted outcome of the whole dataset based on the model use only control group
+yhatf <- function(data = star){
+  Y0 <- data%>%filter(V2==0)%>%select(V1)
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% as.matrix(Y0))
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  return(pred_outcome)
+}
+
+## use to simplify the first loop in former LOO design(meant to reduce overfitting--use LOO samples to predict Y of the leaved sample)
+## can replace the control group predicted Y at one time
+
+yhatfl <- function(data = star){
+  Y0 <- as.matrix(data%>%filter(V2==0)%>%select(V1))
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% Y0)
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  
+  e0 <- Y0 - X0 %*% beta
+
+  Q <- pinv(t(X0) %*% X0)
+  h <- diag(X0 %*% Q %*% t(X0))
+  
+  sp_mat <- diag(as.vector(e0/(1-h)), nrow = N0, ncol = N0)
+    
+  predicted_outcome_cross_validated <- pred_outcome
+  predicted_outcome_cross_validated[which(data$V2==0)] <- X0 %*% beta - diag(X0 %*% Q %*% t(X0) %*% sp_mat)
+  return(predicted_outcome_cross_validated)
+}
+```
+
+
+```{r}
+# function: mregbygroup.m
+mregbygroup <- function(data = star, pred_outcome){
+  n <- nrow(star)
+  
+  # individuals in treatment & control 
+  data_trt_idx <- which(data$V2==1)
+  data_control_idx <- which(data$V2==0)
+  
+  # unadjusted 
+  ## low
+  tau1_idx <- which(pred_outcome <= quantile(pred_outcome,1/3))
+  tau1_trt <- data$V1[intersect(tau1_idx, data_trt_idx)]
+  tau1_control <- data$V1[intersect(tau1_idx, data_control_idx)]
+  tau1_unadj <- mean(tau1_trt)-mean(tau1_control)
+  
+  ## medium
+  tau2_idx <- which((pred_outcome > quantile(pred_outcome,1/3)) & (pred_outcome <= quantile(pred_outcome,2/3)))
+  tau2_trt <- data$V1[intersect(tau2_idx, data_trt_idx)]
+  tau2_control <- data$V1[intersect(tau2_idx, data_control_idx)]
+  tau2_unadj <- mean(tau2_trt)-mean(tau2_control)
+  
+  ## high
+  tau3_idx <- which(pred_outcome > quantile(pred_outcome,2/3))
+  tau3_trt <- data$V1[intersect(tau3_idx, data_trt_idx)]
+  tau3_control <- data$V1[intersect(tau3_idx, data_control_idx)]
+  tau3_unadj <- mean(tau3_trt)-mean(tau3_control)
+  
+  # adjusted
+  ## low
+  fit_tau1 <- lm(V1 ~ ., data=data[tau1_idx,])
+  tau1_adjust <- fit_tau1$coefficients[['V2']]
+  
+  ## medium
+  fit_tau2 <- lm(V1 ~ ., data=data[tau2_idx,])
+  tau2_adjust <- fit_tau2$coefficients[['V2']]
+  
+  ## high
+  fit_tau3 <- lm(V1 ~ ., data=data[tau3_idx,])
+  tau3_adjust <- fit_tau3$coefficients[['V2']]
+  
+  return(c(tau1_unadj, tau2_unadj, tau3_unadj, tau1_adjust, tau2_adjust, tau3_adjust))
+}
+```
+
+
+```{r warning=FALSE}
+# Simulation Star
+N <- nrow(star)
+N0 <- nrow(star[star[,2] == 0,])
+N1 <- N-N0
+
+Y0 <- star[star[,2] == 0, 1]
+k = ncol(star[star[,2] == 0,])
+lm1 <- lm(V1 ~.-V2, data = star %>% filter(V2 ==0))
+beta <- lm1$coefficients
+beta[64] <- 0
+Uhat <- lm1$residuals
+sigma <- sqrt((t(Uhat)%*%Uhat)/(N0-k))
+
+X <- cbind(rep(1, N), star[, 3:83])
+V2 <- c(rep(0,N0), rep(1,N1))
+
+ps <- 1/2
+
+R = 200
+SSR = 100
+est = matrix(0,nrow = R, ncol = 6)
+estl = matrix(0,nrow = R, ncol = 6)
+estss = matrix(0,nrow = R, ncol = 6)
+estf = matrix(0,nrow = R, ncol = 6)
+
+# loop
+for(r in 1:R){
+  print(r)
+  I <- ceiling(N * c(runif(N)))
+  x = X[I,]
+  u = as.vector(sigma)*(c(rnorm(N)))
+  y = as.matrix(x) %*% as.numeric(beta) + u
+  V1 = y
+  # V1 means y, V2 means treatment
+  x <- as.data.frame(cbind(V1, V2, x[,2:ncol(x)]))
+  
+  # generate tau for full sample and loo
+  yhat <- yhatf(data = x)
+  yhatl <- yhatfl(data = x)
+  
+  # record results
+  est[r,] <- mregbygroup(data = x, pred_outcome = yhat)
+  estl[r,] <- mregbygroup(data = x, pred_outcome = yhatl)
+  
+  # generate tau for ss
+  resultsSS = matrix(0,nrow = SSR, ncol = 6)
+  
+  x_control_idx <- which(x$V2==0)
+  x_control <- x[x_control_idx,]
+  
+  for (i in c(1:SSR)){
+  # randomly assign to prediction group or estimation group in control data
+    predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
+    predgrp <- x[predgrp_idx,]
+    estgrp_idx <- setdiff(x_control_idx, predgrp_idx)
+    estgrp <- x[estgrp_idx,]
+    
+    fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
+    fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=x)
+    
+    resultsSS[i,] <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred[-predgrp_idx])
+  }
+  estss[r,] <-  colMeans(resultsSS)
+  
+  # generate tau for 10fold
+  flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
+  ## create new dataset copy from tauk prediction
+  fold_tau_pred <- yhat
+  
+  for (i in 1:10){
+      fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
+      fit_tauk_10fold_pred <- predict(fit_tauk_10fold, newdata=x_control[which(flds == i),])
+      #replace control group predicted value with new 10fold leave out predicted value, keep treatment group predicted value unchanged
+      fold_tau_pred[x_control_idx][which(flds == i)] <- fit_tauk_10fold_pred
+  }
+  estf[r,] <-  mregbygroup(data = x, pred_outcome = fold_tau_pred)
+}
+```
+
+```{r}
+saveRDS(est, file="est.Rda")
+saveRDS(estl, file="estl.Rda")
+saveRDS(estss, file="estss.Rda")
+saveRDS(estf, file="estf.Rda")
+```
+
+```{r}
+#testing_est <- readRDS("est.Rda")
+```
+
+```{r}
+# Bias, 
+bias <-  matrix(0,nrow = 4, ncol = 6)
+bias[1,] <- colMeans(est)
+bias[2,] <- colMeans(estl)
+bias[3,] <- colMeans(estss)
+bias[4,] <- colMeans(estf)
+```
+
+```{r}
+# Coverage
+## full sample
+cov_est <- colMeans(abs(est/colSds(est)) <= 1.96)
+## loo sample
+cov_estl <- colMeans(abs(estl/colSds(estl)) <= 1.96)
+## ss
+cov_estss <- colMeans(abs(estss/colSds(estss)) <= 1.96)
+## 10 fold
+cov_estf <- colMeans(abs(estf/colSds(estf)) <= 1.96)
+
+cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
+```
+
+```{r}
+# RMSE
+rmse_est <- sqrt(colMeans(est**2))
+rmse_estl <- sqrt(colMeans(estl**2))
+rmse_estss <- sqrt(colMeans(estss**2))
+rmse_estf <- sqrt(colMeans(estf**2))
+
+rmse <- rbind(rmse_est, rmse_estl, rmse_estss, rmse_estf)
+```
+
+```{r}
+# Unadjusted
+## Full est
+p1 <- ggplot(data=as.data.frame(est))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('Full sample Unadjusted') + 
+  theme_bw()
+## LOO est
+p2 <- ggplot(data=as.data.frame(estl))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('LOO Unadjusted') + 
+  theme_bw()
+## SS est
+p3 <- ggplot(data=as.data.frame(estss))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('Splited Sample Unadjusted') + 
+  theme_bw()
+## 10fold est
+p4 <- ggplot(data=as.data.frame(estf))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('10-fold Unadjusted') + 
+  theme_bw()
+ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+```
+
+
+
