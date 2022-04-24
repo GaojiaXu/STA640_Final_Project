@@ -18,6 +18,7 @@ library(caret)
 library(proxyC)
 library(ggplot2)
 library(ggpubr)
+library(kableExtra)
 ```
 
 ```{r, eval=FALSE}
@@ -214,6 +215,16 @@ bias[4,] <- colMeans(estf)
 ```
 
 ```{r}
+colnames(bias) <- c(rep(c("Low", "Medium", "High"),2))
+rownames(bias) <- c("$\\hat\\tau_k$", "$\\hat\\tau_k^{LOO}$", 
+                    "$\\hat\\tau_k^{RSS}$","$\\hat\\tau_k^{10fold}$")
+kable(bias, caption = "Bias in STAR Simulations ", digits=2,
+      format = "html", table.attr = "style='width:100%;'") %>%
+add_header_above(c(" ", "Unadjusted" = 3, "Adjusted" = 3)) 
+```
+
+
+```{r}
 # Coverage
 ## full sample
 cov_est <- colMeans(abs(est/colSds(est)) <= 1.96)
@@ -228,6 +239,15 @@ cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
 ```
 
 ```{r}
+colnames(cov) <- c(rep(c("Low", "Medium", "High"),2))
+rownames(cov) <- c("$\\hat\\tau_k$", "$\\hat\\tau_k^{LOO}$", 
+                    "$\\hat\\tau_k^{RSS}$","$\\hat\\tau_k^{10fold}$")
+kable(cov, caption = "Coverage in STAR Simulations ", digits=2,
+      format = "html", table.attr = "style='width:100%;'") %>%
+add_header_above(c(" ", "Unadjusted" = 3, "Adjusted" = 3)) 
+```
+
+```{r}
 # RMSE
 rmse_est <- sqrt(colMeans(est**2))
 rmse_estl <- sqrt(colMeans(estl**2))
@@ -235,6 +255,15 @@ rmse_estss <- sqrt(colMeans(estss**2))
 rmse_estf <- sqrt(colMeans(estf**2))
 
 rmse <- rbind(rmse_est, rmse_estl, rmse_estss, rmse_estf)
+```
+
+```{r}
+colnames(rmse) <- c(rep(c("Low", "Medium", "High"),2))
+rownames(rmse) <- c("$\\hat\\tau_k$", "$\\hat\\tau_k^{LOO}$", 
+                    "$\\hat\\tau_k^{RSS}$","$\\hat\\tau_k^{10fold}$")
+kable(rmse, caption = "RMSE in STAR Simulations ", digits=2,
+      format = "html", table.attr = "style='width:100%;'") %>%
+add_header_above(c(" ", "Unadjusted" = 3, "Adjusted" = 3)) 
 ```
 
 ```{r}
@@ -302,4 +331,5 @@ p8 <- ggplot(data=as.data.frame(estf))+
   theme_bw()
 ggarrange(p5, p6, p7, p8, nrow = 2, ncol = 2)
 ```
+
 
