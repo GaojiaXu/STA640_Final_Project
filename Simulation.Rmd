@@ -13,6 +13,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(pracma)
 library(caret)
+library(proxyC)
+library(ggplot2)
+library(ggpubr)
 ```
 
 ```{r}
@@ -208,13 +211,13 @@ bias[4,] <- colMeans(estf)
 ```{r}
 # Coverage
 ## full sample
-cov_est <- rep(1,6)-colMeans(abs(est/colSds(est)) > 1.96)
+cov_est <- colMeans(abs(est/colSds(est)) <= 1.96)
 ## loo sample
-cov_estl <-rep(1,6)-colMeans(abs(estl/colSds(estl)) > 1.96)
+cov_estl <- colMeans(abs(estl/colSds(estl)) <= 1.96)
 ## ss
-cov_estss <-rep(1,6)-colMeans(abs(estss/colSds(estss)) > 1.96)
+cov_estss <- colMeans(abs(estss/colSds(estss)) <= 1.96)
 ## 10 fold
-cov_estf <-rep(1,6)-colMeans(abs(estf/colSds(estf)) > 1.96)
+cov_estf <- colMeans(abs(estf/colSds(estf)) <= 1.96)
 
 cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
 ```
@@ -222,21 +225,45 @@ cov <- rbind(cov_est, cov_estl, cov_estss, cov_estf)
 ```{r}
 # RMSE
 rmse_est <- sqrt(colMeans(est**2))
+rmse_estl <- sqrt(colMeans(estl**2))
+rmse_estss <- sqrt(colMeans(estss**2))
+rmse_estf <- sqrt(colMeans(estf**2))
 
+rmse <- rbind(rmse_est, rmse_estl, rmse_estss, rmse_estf)
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+# Unadjusted
+## Full est
+p1 <- ggplot(data=as.data.frame(est))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('Full sample Unadjusted') + 
+  theme_bw()
+## LOO est
+p2 <- ggplot(data=as.data.frame(estl))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('LOO Unadjusted') + 
+  theme_bw()
+## SS est
+p3 <- ggplot(data=as.data.frame(estss))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('Splited Sample Unadjusted') + 
+  theme_bw()
+## 10fold est
+p4 <- ggplot(data=as.data.frame(estf))+
+  geom_density(aes(x = V1), linetype="solid") +
+  geom_density(aes(x = V2), linetype="longdash") +
+  geom_density(aes(x = V3), linetype="dotdash") +
+  ggtitle('10-fold Unadjusted') + 
+  theme_bw()
+ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
+```
 
 
 

@@ -4,7 +4,7 @@ library(haven)
 library(tidyverse)
 
 # load data
-star <- read.table("~/Desktop/SPRING2022/STA640/final project/replication files/star/star.raw", quote="\"", comment.char="")
+star <- read.table("star.raw", quote="\"", comment.char="")
 
 # function: mregbygroup.m
 
