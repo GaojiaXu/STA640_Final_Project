@@ -1,0 +1,277 @@
+---
+title: "Simulation"
+author: "Gaojia Xu, Guanqi Zeng"
+date: '2022-04-23'
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(pracma)
+library(caret)
+library(proxyC)
+library(ggplot2)
+library(ggpubr)
+library(knitr)
+```
+
+```{r}
+# load data
+star <- read.table("data/star.raw", quote="\"", comment.char="")
+```
+
+```{r}
+# function: yhatf.m
+## predicted outcome of the whole dataset based on the model use only control group
+yhatf <- function(data = star){
+  Y0 <- data%>%filter(V2==0)%>%select(V1)
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% as.matrix(Y0))
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  return(pred_outcome)
+}
+
+## use to simplify the first loop in former LOO design(meant to reduce overfitting--use LOO samples to predict Y of the leaved sample)
+## can replace the control group predicted Y at one time
+
+yhatfl <- function(data = star){
+  Y0 <- as.matrix(data%>%filter(V2==0)%>%select(V1))
+  N0 <- nrow(Y0)
+  X0 <- as.matrix(cbind(rep(1, N0), data%>%filter(V2==0)%>%select(-c(V1,V2))))
+  
+  beta <- as.matrix(pinv(t(X0) %*% X0) %*% t(X0) %*% Y0)
+  pred_outcome <- as.matrix(cbind(rep(1, nrow(star)), data%>%select(-c(V1,V2)))) %*% beta
+  
+  e0 <- Y0 - X0 %*% beta
+
+  Q <- pinv(t(X0) %*% X0)
+  h <- diag(X0 %*% Q %*% t(X0))
+  
+  sp_mat <- diag(as.vector(e0/(1-h)), nrow = N0, ncol = N0)
+    
+  predicted_outcome_cross_validated <- pred_outcome
+  predicted_outcome_cross_validated[which(data$V2==0)] <- X0 %*% beta - diag(X0 %*% Q %*% t(X0) %*% sp_mat)
+  return(predicted_outcome_cross_validated)
+}
+```
+
+
+```{r}
+# function: mregbygroup.m
+mregbygroup <- function(data = star, pred_outcome){
+  n <- nrow(star)
+  
+  # individuals in treatment & control 
+  data_trt_idx <- which(data$V2==1)
+  data_control_idx <- which(data$V2==0)
+  
+  # unadjusted 
+  ## low
+  tau1_idx <- which(pred_outcome <= quantile(pred_outcome,1/3))
+  tau1_trt <- data$V1[intersect(tau1_idx, data_trt_idx)]
+  tau1_control <- data$V1[intersect(tau1_idx, data_control_idx)]
+  tau1_unadj <- mean(tau1_trt)-mean(tau1_control)
+  
+  ## medium
+  tau2_idx <- which((pred_outcome > quantile(pred_outcome,1/3)) & (pred_outcome <= quantile(pred_outcome,2/3)))
+  tau2_trt <- data$V1[intersect(tau2_idx, data_trt_idx)]
+  tau2_control <- data$V1[intersect(tau2_idx, data_control_idx)]
+  tau2_unadj <- mean(tau2_trt)-mean(tau2_control)
+  
+  ## high
+  tau3_idx <- which(pred_outcome > quantile(pred_outcome,2/3))
+  tau3_trt <- data$V1[intersect(tau3_idx, data_trt_idx)]
+  tau3_control <- data$V1[intersect(tau3_idx, data_control_idx)]
+  tau3_unadj <- mean(tau3_trt)-mean(tau3_control)
+  
+  # adjusted
+  ## low
+  fit_tau1 <- lm(V1 ~ ., data=data[tau1_idx,])
+  tau1_adjust <- fit_tau1$coefficients[['V2']]
+  
+  ## medium
+  fit_tau2 <- lm(V1 ~ ., data=data[tau2_idx,])
+  tau2_adjust <- fit_tau2$coefficients[['V2']]
+  
+  ## high
+  fit_tau3 <- lm(V1 ~ ., data=data[tau3_idx,])
+  tau3_adjust <- fit_tau3$coefficients[['V2']]
+  
+  return(c(tau1_unadj, tau2_unadj, tau3_unadj, tau1_adjust, tau2_adjust, tau3_adjust))
+}
+```
+
+```{r, warning=FALSE}
+# calculate estimations
+
+## prediciton outcome
+### original unadjusted and adjusted estimation
+tau_unadjust <- mean(star$V1[star$V2==1])-mean(star$V1[star$V2==0])
+Y0 <- star %>% filter(V2 ==0) %>% select(V1) %>% unlist() %>% as.vector() %>% as.numeric()
+Y1 <- star %>% filter(V2 ==1) %>% select(V1) %>% unlist() %>% as.vector() %>% as.numeric()
+
+s02 <- (1/(length(Y0)-1)) * sum((Y0 - mean(Y0))^2)
+s12 <- (1/(length(Y1)-1)) * sum((Y1 - mean(Y1))^2)
+sd_tau_unadjust <- sqrt(s02/length(Y0) + s12/length(Y1))
+
+fit1 <- lm(V1 ~ ., data=star)
+tau_adjust <- fit1$coefficients[['V2']]
+sd_tau_adjust <- coef(summary(fit1))['V2', "Std. Error"]
+
+### full sample
+pred_full_sample <- yhatf(data = star)
+tauk_full_sample <- mregbygroup(data = star, pred_outcome = pred_full_sample)
+
+### loo
+pred_loo <- yhatfl(data = star)
+tauk_loo <- mregbygroup(data = star, pred_outcome = pred_loo)
+
+### ss
+resultsSS = matrix(0,nrow = 100, ncol = 6)
+  
+x_control_idx <- which(star$V2==0)
+x_control <- star[x_control_idx,]
+for (i in c(1:100)){
+  # randomly assign to prediction group or estimation group in control data
+    predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
+    predgrp <- star[predgrp_idx,]
+    estgrp_idx <- setdiff(x_control_idx, predgrp_idx)
+    estgrp <- star[estgrp_idx,]
+    
+    fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
+    fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=star)
+    
+    resultsSS[i,] <- mregbygroup(data = star, pred_outcome = fit_tauk_ess_pred[-predgrp_idx])
+  }
+tauk_ss <-  colMeans(resultsSS)
+  
+### 10fold
+# generate tau for 10fold
+flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
+## create new dataset copy from tauk prediction
+fold_tau_pred <- pred_full_sample
+  
+for (i in 1:10){
+    fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
+    fit_tauk_10fold_pred <- predict(fit_tauk_10fold, newdata=x_control[which(flds == i),])
+    #replace control group predicted value with new 10fold leave out predicted value, keep treatment group predicted value unchanged
+    fold_tau_pred[x_control_idx][which(flds == i)] <- fit_tauk_10fold_pred
+  }
+tauk_10fold <-  mregbygroup(data = star, pred_outcome = fold_tau_pred)
+```
+
+
+```{r warning=FALSE}
+set.seed(1988)
+# Bootstrap for SD
+R = 200
+SSR = 100
+est = matrix(0,nrow = R, ncol = 6)
+estl = matrix(0,nrow = R, ncol = 6)
+estss = matrix(0,nrow = R, ncol = 6)
+estf = matrix(0,nrow = R, ncol = 6)
+
+# loop
+for(r in 1:R){
+  print(r)
+  samp <- sample(1:nrow(star), nrow(star), replace = TRUE)
+  x <- star[samp,]
+  
+
+  # generate tau for full sample and loo
+  yhat <- yhatf(data = x)
+  yhatl <- yhatfl(data = x)
+  
+  # record results
+  est[r,] <- mregbygroup(data = x, pred_outcome = yhat)
+  estl[r,] <- mregbygroup(data = x, pred_outcome = yhatl)
+  
+  # generate tau for ss
+  resultsSS = matrix(0,nrow = SSR, ncol = 6)
+  
+  x_control_idx <- which(x$V2==0)
+  x_control <- x[x_control_idx,]
+  
+  for (i in c(1:SSR)){
+  # randomly assign to prediction group or estimation group in control data
+    predgrp_idx <- sample(x_control_idx, size = nrow(x_control)/2)
+    predgrp <- x[predgrp_idx,]
+    estgrp_idx <- setdiff(x_control_idx, predgrp_idx)
+    estgrp <- x[estgrp_idx,]
+    
+    fit_tauk_ess <- lm(V1 ~ .-V2, data=predgrp)
+    fit_tauk_ess_pred <- predict(fit_tauk_ess, newdata=x)
+    
+    resultsSS[i,] <- mregbygroup(data = x, pred_outcome = fit_tauk_ess_pred[-predgrp_idx])
+  }
+  estss[r,] <-  colMeans(resultsSS)
+  
+  # generate tau for 10fold
+  flds <- createFolds(x_control_idx, k = 10, list = FALSE, returnTrain = FALSE)
+  ## create new dataset copy from tauk prediction
+  fold_tau_pred <- yhat
+  
+  for (i in 1:10){
+      fit_tauk_10fold <- lm(V1 ~ .-V2, data=x_control[-which(flds == i),])
+      fit_tauk_10fold_pred <- predict(fit_tauk_10fold, newdata=x_control[which(flds == i),])
+      #replace control group predicted value with new 10fold leave out predicted value, keep treatment group predicted value unchanged
+      fold_tau_pred[x_control_idx][which(flds == i)] <- fit_tauk_10fold_pred
+  }
+  estf[r,] <-  mregbygroup(data = x, pred_outcome = fold_tau_pred)
+}
+```
+
+```{r}
+saveRDS(est, file="sim_results/est_bootstrap.Rda")
+saveRDS(estl, file="sim_results/estl_bootstrap.Rda")
+saveRDS(estss, file="sim_results/estss_bootstrap.Rda")
+saveRDS(estf, file="sim_results/estf_bootstrap.Rda")
+```
+
+```{r}
+est <- readRDS("sim_results/est_bootstrap.Rda")
+estl <- readRDS("sim_results/estl_bootstrap.Rda")
+estss <- readRDS("sim_results/estss_bootstrap.Rda")
+estf <- readRDS("sim_results/estf_bootstrap.Rda")
+```
+
+```{r}
+# bootstrap sd
+sd_full_sample <- colSds(est)
+sd_loo <- colSds(estl)
+sd_ss <- colSds(estss)
+sd_10f <- colSds(estf)
+```
+
+```{r}
+result_default <- rbind(c(tau_unadjust, tau_adjust), c(sd_tau_unadjust, sd_tau_adjust))
+rownames(result_default) <- c("estimation","std")
+kable(result_default, 
+      col.names=c("Unadjusted","Adjusted"),
+      caption = "STAR default results", digits=4)
+```
+
+```{r}
+result_fullsample <- rbind(tauk_full_sample, sd_full_sample)
+result_loo <- rbind(tauk_loo, sd_loo)
+result_ss <- rbind(tauk_ss, sd_ss)
+result_10fold <- rbind(tauk_10fold, sd_10f)
+
+result_table <- rbind(result_fullsample, result_loo, result_ss, result_10fold)
+rownames(result_table) <- c("$\\tau_k$","se $\\tau_k$",
+                    "$\\tau_k^{LOO}$","se $\\tau_k^{LOO}$",
+                    "$\\tau_k^{RSS}$","se $\\tau_k^{RSS}$",
+                    "$\\tau_k^{10fold}$","se $\\tau_k^{10fold}$")
+
+kable(result_table, 
+      col.names=c("Unadj low","Unadj medium","Unadj high","Adj low","Adj medium","Adj high"),
+      caption = "STAR results", digits=4, escape=FALSE)
+```
+
+
