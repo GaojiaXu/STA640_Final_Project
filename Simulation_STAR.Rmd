@@ -196,7 +196,10 @@ saveRDS(estf, file="estf.Rda")
 ```
 
 ```{r}
-#testing_est <- readRDS("est.Rda")
+est <- readRDS("sim_results/est.Rda")
+estl <- readRDS("sim_results/estl.Rda")
+estss <- readRDS("sim_results/estss.Rda")
+estf <- readRDS("sim_results/estf.Rda")
 ```
 
 ```{r}
@@ -265,5 +268,36 @@ p4 <- ggplot(data=as.data.frame(estf))+
 ggarrange(p1, p2, p3, p4, nrow = 2, ncol = 2)
 ```
 
-
+```{r}
+# Adjusted
+## Full est
+p5 <- ggplot(data=as.data.frame(est))+
+  geom_density(aes(x = V4), linetype="solid") +
+  geom_density(aes(x = V5), linetype="longdash") +
+  geom_density(aes(x = V6), linetype="dotdash") +
+  ggtitle('Full sample Adjusted') + 
+  theme_bw()
+## LOO est
+p6 <- ggplot(data=as.data.frame(estl))+
+  geom_density(aes(x = V4), linetype="solid") +
+  geom_density(aes(x = V5), linetype="longdash") +
+  geom_density(aes(x = V6), linetype="dotdash") +
+  ggtitle('LOO Adjusted') + 
+  theme_bw()
+## SS est
+p7 <- ggplot(data=as.data.frame(estss))+
+  geom_density(aes(x = V4), linetype="solid") +
+  geom_density(aes(x = V5), linetype="longdash") +
+  geom_density(aes(x = V6), linetype="dotdash") +
+  ggtitle('Splited Sample Adjusted') + 
+  theme_bw()
+## 10fold est
+p8 <- ggplot(data=as.data.frame(estf))+
+  geom_density(aes(x = V4), linetype="solid") +
+  geom_density(aes(x = V5), linetype="longdash") +
+  geom_density(aes(x = V6), linetype="dotdash") +
+  ggtitle('10-fold Adjusted') + 
+  theme_bw()
+ggarrange(p5, p6, p7, p8, nrow = 2, ncol = 2)
+```
 
