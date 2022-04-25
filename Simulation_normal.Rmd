@@ -211,7 +211,7 @@ results <- readRDS("sim_results_normal/est_normal.Rda")
 ```{r}
 library(kableExtra)
 bias <- lapply(results, colMeans) %>% unlist() %>% as.vector()
-bias_table <- as.data.frame(matrix(bias, nrow=36))
+bias_table <- as.data.frame(matrix(bias, nrow=36, byrow=TRUE))
 
 bias_table <- cbind(bias_table[1:12,], bias_table[13:24,], bias_table[25:36,])
 colnames(bias_table) <- c(rep(c("Low", "Medium", "High"),6))
