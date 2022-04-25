@@ -1,5 +1,13 @@
 # STA640_Final_Project
 
-Contributor: Gaojia Xu, Guanqi Zeng
+##### Contributor: Gaojia Xu, Guanqi Zeng
 
-Simulation of Endogenous Stratification in Randomized Experiments
+## Title: Simulation of Endogenous Stratification in Randomized Experiments
+
+Randomized experiments in the social sciences field have become more and more popular in recent years, as these types of experiments can eliminate the effect of unobserved difference between the treatment group and the control group that may not be able to explained by the study. In addition, for policy makers, as they are typically more interested in the effect of the treatment on particular groups, for example, those who are most in need, subgroups are often created based on the predicted outcome of the units without treatment. In other words, the potential outcomes are generated based on the model built by the out-of-sample untreated units. These predicted outcomes can be seen as the estimated outcomes have the units are untreated, and thus are used as the metrics to stratify the experimental units for average treatment effect calculation.
+
+However, in most of the social sciences experiments settings, such a reliable model may not be obtained. Therefore, a similar approach, endogenous stratification, is employed. Instead of using the out-of-sample data, endogenous stratification applies in-sample-data to build the predictive outcome model. This method first regresses the outcome variable on the baseline covariates using all units from the experimental control group, and then uses the regression coefficients to predict the potential outcomes without treatment for all experimental units. These predicted outcomes are then sorted and split into intervals (e.g. bottom, medium, and top) to create strata for the units. Finally, the average treatment effects are calculated within each stratus.
+
+As endogenous stratification incorporates the information and the relationship between the outcome variable and the covariates for full sample experimental control units, the average treatment effect is biased with a predicted pattern due to the predicted outcome generation process. As demonstrated by Abadie et. al. in 2018, the ATE of the bottom group has a positive bias while the ATE of the top group has a negative bias.
+
+In this project, we demonstrated the bias problem by implementing endogenous stratifi- cation on the Project Star data set and compared the performance of ATE estimation of the two other endogenous stratification methods, leave-one-out and sample splitting, proposed by Abadie et. al. In addition, a third endogenous stratification method, 10 Fold, is proposed and implemented on the STAR data set. Then, we tested the bias problem on a STAR-based simulated data set with these four methods. Finally, we explored the effect of sample size and the number of covariates on the performance of these four methods on the computer- generated data set. Possible explanations of the cause of the bias issue is discussed along with the algorithm explanation of these four methods.
